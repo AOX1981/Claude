@@ -87,12 +87,29 @@ def categorize_transactions(transactions):
     frivolous = []
     necessary = []
 
+    # Internal transfer patterns to exclude (these are transfers between your own accounts)
+    internal_transfer_patterns = [
+        'truist deposit transfer mobile to',
+        'truist online transfer mobile from',
+        'truist transfer mobile to',
+        'truist transfer mobile from',
+        'transfer to savings',
+        'transfer from savings',
+        'transfer to checking',
+        'transfer from checking'
+    ]
+
     for transaction in transactions:
+        description = transaction['description'].lower()
+
+        # Skip internal transfers between accounts
+        if any(pattern in description for pattern in internal_transfer_patterns):
+            continue
+
         # Only categorize debit transactions (expenses)
         if transaction['type'] != 'debit':
             continue
 
-        description = transaction['description'].lower()
         category, category_name = determine_category(description)
 
         # Add category information to transaction
