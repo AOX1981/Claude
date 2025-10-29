@@ -43,20 +43,29 @@ def upload_file():
 
         # Create temporary file in /tmp (Vercel serverless allows /tmp)
         import tempfile
-        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}') as temp_file:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=f'.{file_ext}', mode='wb') as temp_file:
             temp_file.write(file_content)
             temp_filepath = temp_file.name
 
         # Parse the file based on extension
-        if file_ext == 'pdf':
-            transactions = parse_pdf_statement(temp_filepath)
-        elif file_ext == 'csv':
-            transactions = parse_csv_statement(temp_filepath)
-        else:
-            return jsonify({'error': 'Unsupported file type'}), 400
+        try:
+            if file_ext == 'pdf':
+                transactions = parse_pdf_statement(temp_filepath)
+            elif file_ext == 'csv':
+                transactions = parse_csv_statement(temp_filepath)
+            else:
+                return jsonify({'error': 'Unsupported file type'}), 400
+        except Exception as parse_error:
+            # Clean up temp file
+            os.unlink(temp_filepath)
+            return jsonify({'error': f'Error parsing file: {str(parse_error)}'}), 500
 
         # Clean up temp file
         os.unlink(temp_filepath)
+
+        # Check if we got any transactions
+        if not transactions or len(transactions) == 0:
+            return jsonify({'error': 'No transactions found in file. Please check the file format.'}), 400
 
         # Categorize transactions
         categorized = categorize_transactions(transactions)
@@ -73,7 +82,8 @@ def upload_file():
 
     except Exception as e:
         import traceback
-        traceback.print_exc()
+        error_trace = traceback.format_exc()
+        print(error_trace)  # This will show in Vercel logs
         return jsonify({'error': f'Error processing file: {str(e)}'}), 500
 
 @app.route('/health')
