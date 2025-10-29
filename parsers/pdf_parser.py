@@ -203,69 +203,106 @@ def parse_table(table):
 def parse_transaction_line(line):
     """
     Parse a single line of text to extract transaction information.
-    Supports multiple common bank statement formats.
+    Supports multiple common bank statement formats including Truist.
     """
-    # Common patterns for bank statements:
-    # Pattern 1: MM/DD/YYYY Description Amount
-    # Pattern 2: YYYY-MM-DD Description Amount
-    # Pattern 3: DD/MM/YYYY Description Amount
-
     # Remove extra whitespace
     line = ' '.join(line.split())
 
-    # Pattern to match: date, description, and amount
-    # Looking for amounts like: $1,234.56 or 1234.56 or -1234.56
-    amount_pattern = r'[-]?\$?[\d,]+\.\d{2}'
+    # Skip lines that are too short or look like headers
+    if len(line) < 10:
+        return None
 
-    # Date patterns
-    date_patterns = [
-        r'\d{1,2}/\d{1,2}/\d{2,4}',  # MM/DD/YYYY or DD/MM/YYYY
-        r'\d{4}-\d{2}-\d{2}',         # YYYY-MM-DD
-        r'\d{2}-\d{2}-\d{4}',         # DD-MM-YYYY
+    # Skip common header/footer lines
+    skip_patterns = [
+        'page', 'account', 'balance', 'statement', 'total', 'subtotal',
+        'beginning', 'ending', 'deposit', 'withdrawal', 'date', 'description',
+        'checks', 'debits', 'credits', 'interest'
+    ]
+    line_lower = line.lower()
+    if any(skip in line_lower for skip in skip_patterns):
+        return None
+
+    # Pattern to match amounts - including negative and with various formats
+    # Truist often uses formats like: 1,234.56 or -1,234.56
+    amount_patterns = [
+        r'[-]?\$?\d{1,3}(?:,\d{3})*\.\d{2}',  # 1,234.56 or -1,234.56
+        r'[-]?\d+\.\d{2}',                     # 123.56 or -123.56
     ]
 
+    # Date patterns - Truist typically uses MM/DD format
+    date_patterns = [
+        r'\d{1,2}/\d{1,2}(?:/\d{2,4})?',  # MM/DD or MM/DD/YY or MM/DD/YYYY
+        r'\d{2}-\d{2}',                     # MM-DD
+    ]
+
+    # Try to find date and amounts in the line
+    date_match = None
     for date_pattern in date_patterns:
-        # Try to find date and amount in the line
         date_match = re.search(date_pattern, line)
-        amount_match = re.search(amount_pattern, line)
+        if date_match:
+            break
 
-        if date_match and amount_match:
-            date_str = date_match.group()
-            amount_str = amount_match.group()
+    if not date_match:
+        return None
 
-            # Extract description (text between date and amount)
-            date_end = date_match.end()
-            amount_start = amount_match.start()
-            description = line[date_end:amount_start].strip()
+    # Find all amounts in the line (there might be multiple)
+    amounts = []
+    for amount_pattern in amount_patterns:
+        amounts.extend(re.finditer(amount_pattern, line))
 
-            # Skip if description is empty or too short
-            if len(description) < 3:
-                continue
+    if not amounts:
+        return None
 
-            # Parse amount
-            amount = parse_amount(amount_str)
+    # Use the last amount in the line (typically the transaction amount)
+    # In Truist statements, the format is often: Date Description CheckNumber Amount
+    amount_match = amounts[-1]
 
-            # Skip if amount is 0 or invalid
-            if amount is None or amount == 0:
-                continue
+    date_str = date_match.group()
+    amount_str = amount_match.group()
 
-            # Normalize date
-            try:
-                normalized_date = normalize_date(date_str)
-            except:
-                continue
+    # Extract description (text between date and amount)
+    date_end = date_match.end()
+    amount_start = amount_match.start()
+    description = line[date_end:amount_start].strip()
 
-            # Determine transaction type (debit if negative or if it's an expense)
-            transaction_type = 'debit' if amount < 0 else 'credit'
+    # Clean up description - remove check numbers, extra spaces, etc.
+    # Remove trailing numbers that might be check numbers
+    description = re.sub(r'\s+\d+\s*$', '', description)
+    description = description.strip()
 
-            return {
-                'date': normalized_date,
-                'description': description,
-                'amount': abs(amount),  # Store as positive, use type to indicate direction
-                'type': transaction_type
-            }
+    # Skip if description is empty or too short
+    if len(description) < 3:
+        return None
 
-    return None
+    # Parse amount
+    amount = parse_amount(amount_str)
+
+    # Skip if amount is 0 or invalid
+    if amount is None or amount == 0:
+        return None
+
+    # Normalize date - add current year if not present
+    try:
+        if '/' in date_str and date_str.count('/') == 1:
+            # MM/DD format - add year
+            from datetime import datetime
+            current_year = datetime.now().year
+            date_str = f"{date_str}/{current_year}"
+        normalized_date = normalize_date(date_str)
+    except:
+        return None
+
+    # Determine transaction type
+    # In Truist statements, withdrawals are usually negative or in a withdrawal column
+    # For text parsing, assume expenses (most transactions) unless it's clearly positive
+    transaction_type = 'debit' if amount < 0 else 'debit'  # Default to debit for expenses
+
+    return {
+        'date': normalized_date,
+        'description': description,
+        'amount': abs(amount),
+        'type': transaction_type
+    }
 
 def parse_amount(amount_str):
     """Parse amount string to float"""
