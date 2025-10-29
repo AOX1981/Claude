@@ -243,6 +243,10 @@
             color: #e53e3e;
         }
 
+        .transaction-amount.necessary {
+            color: #38a169;
+        }
+
         .error {
             background: #fff5f5;
             border: 1px solid #fc8181;
@@ -454,8 +458,8 @@
             displayCategoryBreakdown('necessaryBreakdown', totals.necessary_by_category);
 
             // Display transactions
-            displayTransactions('frivolousTransactions', data.frivolous_expenses);
-            displayTransactions('necessaryTransactions', data.necessary_expenses);
+            displayTransactions('frivolousTransactions', data.frivolous_expenses, 'frivolous');
+            displayTransactions('necessaryTransactions', data.necessary_expenses, 'necessary');
 
             results.style.display = 'block';
         }
@@ -477,7 +481,7 @@
             });
         }
 
-        function displayTransactions(elementId, transactions) {
+        function displayTransactions(elementId, transactions, type) {
             const container = document.getElementById(elementId);
             container.innerHTML = '';
 
@@ -487,11 +491,12 @@
             transactions.forEach(transaction => {
                 const div = document.createElement('div');
                 div.className = 'transaction-item';
+                const amountClass = type === 'necessary' ? 'transaction-amount necessary' : 'transaction-amount';
                 div.innerHTML = `
                     <div class="transaction-date">${transaction.date}</div>
                     <div class="transaction-description">${transaction.description}</div>
                     <div class="transaction-category">${transaction.category.replace(/_/g, ' ')}</div>
-                    <div class="transaction-amount">$${transaction.amount.toFixed(2)}</div>
+                    <div class="${amountClass}">$${transaction.amount.toFixed(2)}</div>
                 `;
                 container.appendChild(div);
             });
