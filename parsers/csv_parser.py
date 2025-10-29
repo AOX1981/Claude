@@ -16,34 +16,51 @@ def parse_csv_statement(filepath):
         except UnicodeDecodeError:
             df = pd.read_csv(filepath, encoding='latin-1')
 
+        # Log columns for debugging
+        print(f"DEBUG: CSV columns: {list(df.columns)}")
+        print(f"DEBUG: CSV shape: {df.shape}")
+
         # Normalize column names (lowercase and strip whitespace)
         df.columns = df.columns.str.lower().str.strip()
 
         # Identify relevant columns
-        date_col = identify_column(df, ['date', 'transaction date', 'posting date', 'trans date'])
-        desc_col = identify_column(df, ['description', 'memo', 'details', 'transaction', 'payee'])
-        amount_col = identify_column(df, ['amount', 'transaction amount', 'debit', 'credit'])
+        date_col = identify_column(df, ['date', 'transaction date', 'posting date', 'trans date', 'posted'])
+        desc_col = identify_column(df, ['description', 'memo', 'details', 'transaction', 'payee', 'merchant'])
+        amount_col = identify_column(df, ['amount', 'transaction amount'])
 
-        if not date_col or not desc_col or not amount_col:
+        print(f"DEBUG: Found columns - date: {date_col}, desc: {desc_col}, amount: {amount_col}")
+
+        if not date_col or not desc_col:
+            raise ValueError(f'Could not identify required columns. Found columns: {list(df.columns)}')
+
+        # Try to find amount column - could be single amount or debit/credit
+        if not amount_col:
             # Try alternative approach: check if there's a debit and credit column
-            debit_col = identify_column(df, ['debit', 'withdrawal', 'debits'])
-            credit_col = identify_column(df, ['credit', 'deposit', 'credits'])
+            debit_col = identify_column(df, ['debit', 'withdrawal', 'debits', 'withdrawals'])
+            credit_col = identify_column(df, ['credit', 'deposit', 'credits', 'deposits'])
 
-            if debit_col and credit_col and date_col and desc_col:
+            print(f"DEBUG: Trying debit/credit format - debit: {debit_col}, credit: {credit_col}")
+
+            if debit_col and credit_col:
                 return parse_debit_credit_format(df, date_col, desc_col, debit_col, credit_col)
             else:
-                raise ValueError('Could not identify required columns in CSV')
+                raise ValueError(f'Could not identify amount column. Found columns: {list(df.columns)}')
 
         transactions = []
 
-        for _, row in df.iterrows():
+        for idx, row in df.iterrows():
             try:
                 date = normalize_date(str(row[date_col]))
                 description = str(row[desc_col]).strip()
                 amount = parse_amount(row[amount_col])
 
-                # Skip invalid rows
-                if pd.isna(amount) or amount == 0 or len(description) < 3:
+                # Skip invalid rows but log them
+                if pd.isna(amount) or amount == 0:
+                    print(f"DEBUG: Skipping row {idx} - invalid amount: {row[amount_col]}")
+                    continue
+
+                if len(description) < 3 or description == 'nan':
+                    print(f"DEBUG: Skipping row {idx} - invalid description: {description}")
                     continue
 
                 # Determine transaction type
@@ -56,12 +73,14 @@ def parse_csv_statement(filepath):
                     'type': transaction_type
                 })
             except Exception as e:
-                # Skip problematic rows
+                print(f"DEBUG: Error parsing row {idx}: {str(e)}")
                 continue
 
+        print(f"DEBUG: Found {len(transactions)} total transactions")
         return transactions
 
     except Exception as e:
+        print(f"DEBUG: Fatal error in parse_csv_statement: {str(e)}")
         raise Exception(f'Error parsing CSV: {str(e)}')
 
 def parse_debit_credit_format(df, date_col, desc_col, debit_col, credit_col):
