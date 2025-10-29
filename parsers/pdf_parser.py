@@ -72,16 +72,22 @@ def parse_table(table):
     date_idx = None
     desc_idx = None
     amount_idx = None
+    withdrawal_idx = None
+    deposit_idx = None
 
     for i, col in enumerate(header):
         if any(keyword in col for keyword in ['date', 'posted', 'trans']):
             date_idx = i
         elif any(keyword in col for keyword in ['description', 'memo', 'detail', 'merchant', 'payee']):
             desc_idx = i
-        elif any(keyword in col for keyword in ['amount', 'debit', 'withdrawal']):
+        elif any(keyword in col for keyword in ['withdrawal', 'debit', 'payment']):
+            withdrawal_idx = i
+        elif any(keyword in col for keyword in ['deposit', 'credit']):
+            deposit_idx = i
+        elif any(keyword in col for keyword in ['amount']):
             amount_idx = i
 
-    print(f"DEBUG: Column indices - date: {date_idx}, desc: {desc_idx}, amount: {amount_idx}")
+    print(f"DEBUG: Column indices - date: {date_idx}, desc: {desc_idx}, amount: {amount_idx}, withdrawal: {withdrawal_idx}, deposit: {deposit_idx}")
 
     # If we can't find columns by header, try to infer from data
     if date_idx is None or desc_idx is None or amount_idx is None:
@@ -112,48 +118,81 @@ def parse_table(table):
             # Extract values
             date_val = row[date_idx] if date_idx is not None and date_idx < len(row) else None
             desc_val = row[desc_idx] if desc_idx is not None and desc_idx < len(row) else None
-            amount_val = row[amount_idx] if amount_idx is not None and amount_idx < len(row) else None
 
-            # If desc_idx not found, try to concatenate middle columns
-            if desc_val is None and date_idx is not None and amount_idx is not None:
-                desc_parts = []
-                for i in range(len(row)):
-                    if i != date_idx and i != amount_idx and row[i]:
-                        desc_parts.append(str(row[i]))
-                desc_val = ' '.join(desc_parts)
-
-            if not date_val or not amount_val:
+            if not date_val:
                 continue
 
-            # Parse values
+            # Parse date first
             date_str = str(date_val).strip()
-            description = str(desc_val).strip() if desc_val else ''
-            amount_str = str(amount_val).strip()
-
-            # Skip if description is too short
-            if len(description) < 3:
-                continue
-
-            # Parse amount
-            amount = parse_amount(amount_str)
-            if amount is None or amount == 0:
-                continue
-
-            # Parse date
             try:
                 normalized_date = normalize_date(date_str)
             except:
                 continue
 
-            # Determine transaction type
-            transaction_type = 'debit' if amount < 0 else 'credit'
+            # Get description
+            description = str(desc_val).strip() if desc_val else ''
 
-            transactions.append({
-                'date': normalized_date,
-                'description': description,
-                'amount': abs(amount),
-                'type': transaction_type
-            })
+            # If desc_idx not found, try to concatenate middle columns
+            if not description or len(description) < 3:
+                if date_idx is not None:
+                    desc_parts = []
+                    for i in range(len(row)):
+                        if i != date_idx and i != amount_idx and i != withdrawal_idx and i != deposit_idx and row[i]:
+                            desc_parts.append(str(row[i]))
+                    description = ' '.join(desc_parts)
+
+            # Skip if description is still too short
+            if len(description) < 3:
+                continue
+
+            # Handle withdrawal/deposit columns (Truist Bank format)
+            if withdrawal_idx is not None or deposit_idx is not None:
+                # Check withdrawal column
+                if withdrawal_idx is not None and withdrawal_idx < len(row):
+                    withdrawal_val = row[withdrawal_idx]
+                    if withdrawal_val and str(withdrawal_val).strip():
+                        amount = parse_amount(str(withdrawal_val))
+                        if amount and amount != 0:
+                            transactions.append({
+                                'date': normalized_date,
+                                'description': description,
+                                'amount': abs(amount),
+                                'type': 'debit'
+                            })
+
+                # Check deposit column
+                if deposit_idx is not None and deposit_idx < len(row):
+                    deposit_val = row[deposit_idx]
+                    if deposit_val and str(deposit_val).strip():
+                        amount = parse_amount(str(deposit_val))
+                        if amount and amount != 0:
+                            transactions.append({
+                                'date': normalized_date,
+                                'description': description,
+                                'amount': abs(amount),
+                                'type': 'credit'
+                            })
+
+            # Otherwise use single amount column
+            elif amount_idx is not None:
+                amount_val = row[amount_idx] if amount_idx < len(row) else None
+                if not amount_val:
+                    continue
+
+                amount_str = str(amount_val).strip()
+                amount = parse_amount(amount_str)
+                if amount is None or amount == 0:
+                    continue
+
+                # Determine transaction type
+                transaction_type = 'debit' if amount < 0 else 'credit'
+
+                transactions.append({
+                    'date': normalized_date,
+                    'description': description,
+                    'amount': abs(amount),
+                    'type': transaction_type
+                })
 
         except Exception as e:
             print(f"DEBUG: Error parsing table row {row_num}: {str(e)}")
