@@ -263,12 +263,18 @@ def parse_transaction_line(line):
     # Extract description (text between date and amount)
     date_end = date_match.end()
     amount_start = amount_match.start()
-    description = line[date_end:amount_start].strip()
 
-    # Clean up description - remove check numbers, extra spaces, etc.
-    # Remove trailing numbers that might be check numbers
-    description = re.sub(r'\s+\d+\s*$', '', description)
-    description = description.strip()
+    # Get the full description area
+    description_area = line[date_end:amount_start].strip()
+
+    # Remove any digits that are part of the amount (commas in thousands)
+    # The amount regex might not capture the full number if there are spaces
+    # Remove trailing numbers that are likely part of the amount
+    description = re.sub(r'[\d,]+\s*$', '', description_area).strip()
+
+    # Also clean up check numbers that come after description (usually smaller numbers)
+    # But keep the description text
+    description = re.sub(r'\s+\d{1,6}\s*$', '', description).strip()
 
     # Skip if description is empty or too short
     if len(description) < 3:
@@ -293,9 +299,34 @@ def parse_transaction_line(line):
         return None
 
     # Determine transaction type
-    # In Truist statements, withdrawals are usually negative or in a withdrawal column
-    # For text parsing, assume expenses (most transactions) unless it's clearly positive
-    transaction_type = 'debit' if amount < 0 else 'debit'  # Default to debit for expenses
+    # Look for deposit keywords in description
+    deposit_keywords = ['deposit', 'direct dep', 'credit', 'payroll', 'transfer from', 'payment received']
+    is_deposit = any(keyword in description.lower() for keyword in deposit_keywords)
+
+    # If amount is negative, it's definitely a debit
+    # If positive and looks like a deposit, it's credit
+    # Otherwise, default to debit (most transactions are expenses)
+    if amount < 0:
+        transaction_type = 'debit'
+    elif is_deposit:
+        transaction_type = 'credit'
+    else:
+        # For Truist, check if there are two amounts on the line
+        # Format is often: Date Description Debit Credit
+        # If this is the second amount, it's likely a credit
+        if len(amounts) >= 2 and amount_match == amounts[-1]:
+            # This might be the credit column
+            # Check if previous amount exists and is larger (indicating this might be credit)
+            prev_amount_str = amounts[-2].group()
+            prev_amount = parse_amount(prev_amount_str)
+            if prev_amount and prev_amount == 0:
+                # Previous column was empty/zero, this is likely a debit
+                transaction_type = 'debit'
+            else:
+                # Could be either, default to debit for safety
+                transaction_type = 'debit'
+        else:
+            transaction_type = 'debit'
 
     return {
         'date': normalized_date,
