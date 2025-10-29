@@ -24,8 +24,11 @@ NECESSARY_CATEGORIES = {
     ],
     'transportation': [
         'gas station', 'fuel', 'shell', 'chevron', 'exxon', 'bp', 'mobil',
+        'sunoco', 'speedway', 'wawa', 'sheetz', 'circle k', 'marathon',
+        '76 gas', 'conoco', 'phillips 66', 'valero', 'arco', 'citgo',
+        'flying j', 'pilot', 'loves', 'shell oil', 'gas & shop',
         'car payment', 'auto loan', 'car insurance', 'parking', 'toll',
-        'public transit', 'metro', 'bus fare', 'train'
+        'public transit', 'metro', 'bus fare', 'train', 'uber', 'lyft'
     ],
     'insurance': [
         'insurance', 'life insurance', 'auto insurance', 'home insurance',
