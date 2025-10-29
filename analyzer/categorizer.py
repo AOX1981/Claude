@@ -10,7 +10,8 @@ NECESSARY_CATEGORIES = {
     'utilities': [
         'electric', 'power', 'water', 'gas', 'utility', 'energy',
         'internet', 'cable', 'phone', 'mobile', 'wireless', 'verizon',
-        'at&t', 'comcast', 'spectrum', 'xfinity'
+        'vzwrlss', 'at&t', 'att', 't-mobile', 'tmobile', 'sprint',
+        'comcast', 'spectrum', 'xfinity', 'bill pay'
     ],
     'housing': [
         'rent', 'mortgage', 'landlord', 'property management', 'lease',
@@ -28,11 +29,17 @@ NECESSARY_CATEGORIES = {
     ],
     'insurance': [
         'insurance', 'life insurance', 'auto insurance', 'home insurance',
-        'renters insurance'
+        'renters insurance', 'car insurance', 'progressive', 'geico',
+        'state farm', 'allstate', 'farmers insurance', 'usaa'
     ],
     'education': [
         'tuition', 'school', 'university', 'college', 'student loan',
         'textbook', 'course', 'education'
+    ],
+    'debt_payment': [
+        'credit card payment', 'loan payment', 'edi pymnts', 'cc payment',
+        'mission lane', 'capital one payment', 'chase payment', 'discover payment',
+        'amex payment', 'citi payment', 'payment to', 'autopay'
     ]
 }
 

@@ -300,7 +300,11 @@ def parse_transaction_line(line):
 
     # Determine transaction type
     # Look for deposit keywords in description
-    deposit_keywords = ['deposit', 'direct dep', 'credit', 'payroll', 'transfer from', 'payment received']
+    deposit_keywords = [
+        'deposit', 'direct dep', 'credit', 'payroll', 'transfer from',
+        'payment received', 'zelle payment from', 'venmo from', 'cashapp from',
+        'payment from', 'refund'
+    ]
     is_deposit = any(keyword in description.lower() for keyword in deposit_keywords)
 
     # If amount is negative, it's definitely a debit
