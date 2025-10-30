@@ -723,10 +723,14 @@
             const formData = new FormData();
             formData.append('file', selectedFile);
 
-            // Include user rules
-            const rules = loadRules();
-            if (rules.length > 0) {
-                formData.append('user_rules', JSON.stringify(rules));
+            // Include user rules (safely)
+            try {
+                const rules = loadRules();
+                if (rules && rules.length > 0) {
+                    formData.append('user_rules', JSON.stringify(rules));
+                }
+            } catch (e) {
+                console.log('No rules loaded', e);
             }
 
             loading.style.display = 'block';
