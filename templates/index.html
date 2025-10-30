@@ -293,6 +293,151 @@
                 text-align: left;
             }
         }
+
+        /* Learning Feature Styles */
+        .transaction-item {
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .transaction-item:hover {
+            background: #edf2f7 !important;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 20px;
+            color: #2d3748;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .modal-btn.primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .modal-btn.primary:hover {
+            background: #5568d3;
+        }
+
+        .modal-btn.secondary {
+            background: #e2e8f0;
+            color: #2d3748;
+        }
+
+        .modal-btn.secondary:hover {
+            background: #cbd5e0;
+        }
+
+        .rules-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .rules-section h2 {
+            color: #2d3748;
+            margin-bottom: 15px;
+        }
+
+        .rules-list {
+            margin-top: 20px;
+        }
+
+        .rule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .rule-item.necessary {
+            border-left-color: #38a169;
+        }
+
+        .rule-item.frivolous {
+            border-left-color: #e53e3e;
+        }
+
+        .rule-info {
+            flex: 1;
+        }
+
+        .rule-pattern {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 5px;
+        }
+
+        .rule-category {
+            font-size: 0.9em;
+            color: #718096;
+        }
+
+        .rule-delete {
+            background: #fc8181;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background 0.2s ease;
+        }
+
+        .rule-delete:hover {
+            background: #f56565;
+        }
+
+        .info-banner {
+            background: #bee3f8;
+            border-left: 4px solid #4299e1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: #2c5282;
+        }
     </style>
 </head>
 <body>
@@ -318,6 +463,32 @@
                 <p>Analyzing your spending...</p>
             </div>
             <div class="error" id="error" style="display: none;"></div>
+        </div>
+
+        <!-- Rules Management Section -->
+        <div class="rules-section" id="rulesSection" style="display: none;">
+            <h2>Your Learning Rules</h2>
+            <div class="info-banner">
+                Click any transaction below to reclassify it. The app will remember your choice and apply it automatically next time!
+            </div>
+            <div class="rules-list" id="rulesList">
+                <p style="color: #718096;">No rules yet. Click a transaction to create your first rule!</p>
+            </div>
+        </div>
+
+        <!-- Reclassification Modal -->
+        <div id="reclassifyModal" class="modal">
+            <div class="modal-content">
+                <h2>Reclassify Transaction</h2>
+                <p id="modalDescription" style="margin-bottom: 20px; color: #4a5568;"></p>
+                <p style="margin-bottom: 10px; color: #2d3748;">This transaction is currently: <strong id="modalCurrentCategory"></strong></p>
+                <p style="color: #718096; font-size: 0.9em; margin-bottom: 20px;">Change it to:</p>
+                <div class="modal-buttons">
+                    <button class="modal-btn primary" id="markNecessary">Mark as Necessary</button>
+                    <button class="modal-btn primary" id="markFrivolous">Mark as Frivolous</button>
+                    <button class="modal-btn secondary" id="modalCancel">Cancel</button>
+                </div>
+            </div>
         </div>
 
         <div class="results" id="results">
@@ -361,6 +532,144 @@
         const results = document.getElementById('results');
 
         let selectedFile = null;
+        let currentTransaction = null;
+
+        // ==================== LEARNING FEATURE ====================
+
+        // localStorage Management
+        const RULES_KEY = 'financialAnalyzerRules';
+
+        function loadRules() {
+            const rulesJson = localStorage.getItem(RULES_KEY);
+            return rulesJson ? JSON.parse(rulesJson) : [];
+        }
+
+        function saveRules(rules) {
+            localStorage.setItem(RULES_KEY, JSON.stringify(rules));
+            displayRules();
+        }
+
+        function addRule(pattern, category, categoryName) {
+            const rules = loadRules();
+            // Check if rule already exists
+            const existingIndex = rules.findIndex(r => r.pattern.toLowerCase() === pattern.toLowerCase());
+            if (existingIndex >= 0) {
+                // Update existing rule
+                rules[existingIndex] = { pattern, category, category_name: categoryName };
+            } else {
+                // Add new rule
+                rules.push({ pattern, category, category_name: categoryName });
+            }
+            saveRules(rules);
+        }
+
+        function deleteRule(pattern) {
+            let rules = loadRules();
+            rules = rules.filter(r => r.pattern !== pattern);
+            saveRules(rules);
+        }
+
+        function displayRules() {
+            const rules = loadRules();
+            const rulesList = document.getElementById('rulesList');
+            const rulesSection = document.getElementById('rulesSection');
+
+            if (rules.length === 0) {
+                rulesList.innerHTML = '<p style="color: #718096;">No rules yet. Click a transaction to create your first rule!</p>';
+                rulesSection.style.display = 'none';
+            } else {
+                rulesSection.style.display = 'block';
+                rulesList.innerHTML = rules.map(rule => `
+                    <div class="rule-item ${rule.category}">
+                        <div class="rule-info">
+                            <div class="rule-pattern">Pattern: "${rule.pattern}"</div>
+                            <div class="rule-category">Category: ${rule.category === 'necessary' ? 'Necessary' : 'Frivolous'} (${rule.category_name})</div>
+                        </div>
+                        <button class="rule-delete" onclick="deleteRuleHandler('${rule.pattern.replace(/'/g, "\\'")}')">Delete</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function deleteRuleHandler(pattern) {
+            if (confirm(`Delete rule for "${pattern}"?`)) {
+                deleteRule(pattern);
+            }
+        }
+
+        // Modal Management
+        const modal = document.getElementById('reclassifyModal');
+        const modalDescription = document.getElementById('modalDescription');
+        const modalCurrentCategory = document.getElementById('modalCurrentCategory');
+        const markNecessary = document.getElementById('markNecessary');
+        const markFrivolous = document.getElementById('markFrivolous');
+        const modalCancel = document.getElementById('modalCancel');
+
+        function showModal(transaction, currentType) {
+            currentTransaction = transaction;
+            modalDescription.textContent = transaction.description;
+            modalCurrentCategory.textContent = currentType === 'frivolous' ? 'Frivolous' : 'Necessary';
+            modal.style.display = 'block';
+        }
+
+        function closeModal() {
+            modal.style.display = 'none';
+            currentTransaction = null;
+        }
+
+        markNecessary.addEventListener('click', () => {
+            if (currentTransaction) {
+                // Extract a pattern - use first 3 words or key merchant name
+                const words = currentTransaction.description.split(' ').filter(w => w.length > 2);
+                const pattern = words.slice(0, 2).join(' ').toLowerCase();
+
+                addRule(pattern, 'necessary', currentTransaction.category || 'user_defined');
+                closeModal();
+
+                // Show success message
+                const successMsg = document.createElement('div');
+                successMsg.className = 'info-banner';
+                successMsg.style.background = '#c6f6d5';
+                successMsg.style.borderColor = '#38a169';
+                successMsg.style.color = '#22543d';
+                successMsg.textContent = `Rule created! Transactions containing "${pattern}" will now be marked as Necessary.`;
+                document.querySelector('.container').insertBefore(successMsg, document.querySelector('.rules-section'));
+                setTimeout(() => successMsg.remove(), 5000);
+            }
+        });
+
+        markFrivolous.addEventListener('click', () => {
+            if (currentTransaction) {
+                const words = currentTransaction.description.split(' ').filter(w => w.length > 2);
+                const pattern = words.slice(0, 2).join(' ').toLowerCase();
+
+                addRule(pattern, 'frivolous', currentTransaction.category || 'user_defined');
+                closeModal();
+
+                const successMsg = document.createElement('div');
+                successMsg.className = 'info-banner';
+                successMsg.style.background = '#fed7d7';
+                successMsg.style.borderColor = '#e53e3e';
+                successMsg.style.color = '#742a2a';
+                successMsg.textContent = `Rule created! Transactions containing "${pattern}" will now be marked as Frivolous.`;
+                document.querySelector('.container').insertBefore(successMsg, document.querySelector('.rules-section'));
+                setTimeout(() => successMsg.remove(), 5000);
+            }
+        });
+
+        modalCancel.addEventListener('click', closeModal');
+
+        // Close modal when clicking outside
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal();
+            }
+        });
+
+        // Load rules on page load
+        displayRules();
+
+        // ==================== END LEARNING FEATURE ====================
 
         // Click to upload
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -413,6 +722,12 @@
 
             const formData = new FormData();
             formData.append('file', selectedFile);
+
+            // Include user rules
+            const rules = loadRules();
+            if (rules.length > 0) {
+                formData.append('user_rules', JSON.stringify(rules));
+            }
 
             loading.style.display = 'block';
             analyzeBtn.disabled = true;
@@ -498,6 +813,12 @@
                     <div class="transaction-category">${transaction.category.replace(/_/g, ' ')}</div>
                     <div class="${amountClass}">$${transaction.amount.toFixed(2)}</div>
                 `;
+
+                // Add click handler for learning
+                div.addEventListener('click', () => {
+                    showModal(transaction, type);
+                });
+
                 container.appendChild(div);
             });
         }

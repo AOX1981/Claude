@@ -67,8 +67,17 @@ def upload_file():
         if not transactions or len(transactions) == 0:
             return jsonify({'error': 'No transactions found in file. Please check the file format.'}), 400
 
-        # Categorize transactions
-        categorized = categorize_transactions(transactions)
+        # Get user rules from request (if any)
+        user_rules = request.form.get('user_rules')
+        if user_rules:
+            import json
+            try:
+                user_rules = json.loads(user_rules)
+            except:
+                user_rules = None
+
+        # Categorize transactions with user rules
+        categorized = categorize_transactions(transactions, user_rules=user_rules)
 
         # Calculate totals
         totals = calculate_totals(categorized)

@@ -84,12 +84,13 @@ FRIVOLOUS_CATEGORIES = {
     ]
 }
 
-def categorize_transactions(transactions):
+def categorize_transactions(transactions, user_rules=None):
     """
     Categorize transactions into frivolous and necessary expenses.
 
     Args:
         transactions: List of transaction dictionaries
+        user_rules: Optional list of user-defined categorization rules
 
     Returns:
         Dictionary with 'frivolous' and 'necessary' lists
@@ -120,7 +121,22 @@ def categorize_transactions(transactions):
         if transaction['type'] != 'debit':
             continue
 
-        category, category_name = determine_category(description)
+        # Check user rules first
+        user_category = None
+        user_category_name = None
+        if user_rules:
+            for rule in user_rules:
+                if rule.get('pattern', '').lower() in description:
+                    user_category = rule.get('category')
+                    user_category_name = rule.get('category_name', 'user_defined')
+                    break
+
+        # Use user rule if found, otherwise use default categorization
+        if user_category:
+            category = user_category
+            category_name = user_category_name
+        else:
+            category, category_name = determine_category(description)
 
         # Add category information to transaction
         transaction_with_category = transaction.copy()
