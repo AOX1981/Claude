@@ -181,6 +181,93 @@
         }
 
         .transaction-amount.necessary { color: #38a169; }
+
+        /* Learning Feature */
+        .transaction-item { cursor: pointer; transition: background 0.2s; }
+        .transaction-item:hover { background: #edf2f7 !important; }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+            background: white;
+            margin: 10% auto;
+            padding: 30px;
+            border-radius: 12px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-content h2 { margin-bottom: 20px; color: #2d3748; }
+
+        .modal-buttons { display: flex; gap: 10px; margin-top: 20px; }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+        }
+
+        .modal-btn.primary { background: #667eea; color: white; }
+        .modal-btn.primary:hover { background: #5568d3; }
+        .modal-btn.secondary { background: #e2e8f0; color: #2d3748; }
+
+        .rules-section {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+            display: none;
+        }
+
+        .rules-section h2 { color: #2d3748; margin-bottom: 15px; }
+
+        .info-banner {
+            background: #bee3f8;
+            border-left: 4px solid #4299e1;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: #2c5282;
+        }
+
+        .rule-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .rule-item.necessary { border-left-color: #38a169; }
+        .rule-item.frivolous { border-left-color: #e53e3e; }
+        .rule-info { flex: 1; }
+        .rule-pattern { font-weight: 600; color: #2d3748; margin-bottom: 5px; }
+        .rule-category { font-size: 0.9em; color: #718096; }
+
+        .rule-delete {
+            background: #fc8181;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +293,29 @@
                 <p>Analyzing your spending...</p>
             </div>
             <div class="error" id="error"></div>
+        </div>
+
+        <!-- Rules Section -->
+        <div class="rules-section" id="rulesSection">
+            <h2>Your Learning Rules</h2>
+            <div class="info-banner">
+                Click any transaction to reclassify it. The app will remember and auto-apply next time!
+            </div>
+            <div id="rulesList"></div>
+        </div>
+
+        <!-- Modal -->
+        <div id="modal" class="modal">
+            <div class="modal-content">
+                <h2>Reclassify Transaction</h2>
+                <p id="modalDesc" style="margin-bottom: 20px; color: #4a5568;"></p>
+                <p style="margin-bottom: 20px; color: #2d3748;">Currently: <strong id="modalCurrent"></strong></p>
+                <div class="modal-buttons">
+                    <button class="modal-btn primary" id="btnNecessary">Mark Necessary</button>
+                    <button class="modal-btn primary" id="btnFrivolous">Mark Frivolous</button>
+                    <button class="modal-btn secondary" id="btnCancel">Cancel</button>
+                </div>
+            </div>
         </div>
 
         <div class="results" id="results">
@@ -247,6 +357,141 @@
         const results = document.getElementById('results');
 
         let selectedFile = null;
+        let currentTrans = null;
+        let rawData = null;
+
+        // === LEARNING SYSTEM ===
+        function loadRules() {
+            try {
+                return JSON.parse(localStorage.getItem('rules') || '[]');
+            } catch { return []; }
+        }
+
+        function saveRule(pattern, category) {
+            const rules = loadRules();
+            const existing = rules.findIndex(r => r.pattern === pattern);
+            if (existing >= 0) rules[existing].category = category;
+            else rules.push({ pattern, category });
+            localStorage.setItem('rules', JSON.stringify(rules));
+            showRules();
+        }
+
+        function deleteRule(pattern) {
+            let rules = loadRules();
+            rules = rules.filter(r => r.pattern !== pattern);
+            localStorage.setItem('rules', JSON.stringify(rules));
+            showRules();
+        }
+
+        function applyRules(data) {
+            const rules = loadRules();
+            if (rules.length === 0) return data;
+
+            let allTransactions = [...data.frivolous_expenses, ...data.necessary_expenses];
+            let frivolous = [];
+            let necessary = [];
+
+            allTransactions.forEach(trans => {
+                let matched = false;
+                for (let rule of rules) {
+                    if (trans.description.toLowerCase().includes(rule.pattern.toLowerCase())) {
+                        if (rule.category === 'necessary') necessary.push(trans);
+                        else frivolous.push(trans);
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    // Use original categorization
+                    const wasFrivolous = data.frivolous_expenses.some(t =>
+                        t.description === trans.description && t.date === trans.date
+                    );
+                    if (wasFrivolous) frivolous.push(trans);
+                    else necessary.push(trans);
+                }
+            });
+
+            // Recalculate totals
+            const frivolousTotal = frivolous.reduce((sum, t) => sum + t.amount, 0);
+            const necessaryTotal = necessary.reduce((sum, t) => sum + t.amount, 0);
+            const total = frivolousTotal + necessaryTotal;
+
+            return {
+                frivolous_expenses: frivolous,
+                necessary_expenses: necessary,
+                totals: {
+                    total_expenses: total,
+                    frivolous_total: frivolousTotal,
+                    necessary_total: necessaryTotal,
+                    frivolous_percentage: total > 0 ? (frivolousTotal / total * 100) : 0
+                }
+            };
+        }
+
+        function showRules() {
+            const rules = loadRules();
+            const section = document.getElementById('rulesSection');
+            const list = document.getElementById('rulesList');
+
+            if (rules.length === 0) {
+                section.style.display = 'none';
+                return;
+            }
+
+            section.style.display = 'block';
+            list.innerHTML = rules.map(r => `
+                <div class="rule-item ${r.category}">
+                    <div class="rule-info">
+                        <div class="rule-pattern">"${r.pattern}"</div>
+                        <div class="rule-category">${r.category === 'necessary' ? 'Necessary' : 'Frivolous'}</div>
+                    </div>
+                    <button class="rule-delete" onclick="deleteRuleAndRefresh('${r.pattern.replace(/'/g, "\\'")}')">Delete</button>
+                </div>
+            `).join('');
+        }
+
+        function deleteRuleAndRefresh(pattern) {
+            if (confirm(`Delete rule for "${pattern}"?`)) {
+                deleteRule(pattern);
+                if (rawData) displayResults(applyRules(rawData));
+            }
+        }
+
+        function showModal(trans, type) {
+            currentTrans = trans;
+            document.getElementById('modalDesc').textContent = trans.description;
+            document.getElementById('modalCurrent').textContent = type === 'frivolous' ? 'Frivolous' : 'Necessary';
+            document.getElementById('modal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('modal').style.display = 'none';
+            currentTrans = null;
+        }
+
+        document.getElementById('btnNecessary').onclick = () => {
+            if (currentTrans) {
+                const pattern = currentTrans.description.split(' ').filter(w => w.length > 2).slice(0, 2).join(' ');
+                saveRule(pattern, 'necessary');
+                closeModal();
+                if (rawData) displayResults(applyRules(rawData));
+            }
+        };
+
+        document.getElementById('btnFrivolous').onclick = () => {
+            if (currentTrans) {
+                const pattern = currentTrans.description.split(' ').filter(w => w.length > 2).slice(0, 2).join(' ');
+                saveRule(pattern, 'frivolous');
+                closeModal();
+                if (rawData) displayResults(applyRules(rawData));
+            }
+        };
+
+        document.getElementById('btnCancel').onclick = closeModal;
+        document.getElementById('modal').onclick = (e) => { if (e.target.id === 'modal') closeModal(); };
+
+        showRules();
+        // === END LEARNING SYSTEM ===
 
         uploadArea.addEventListener('click', () => fileInput.click());
 
@@ -310,7 +555,8 @@
                 const data = await response.json();
 
                 if (response.ok && data.success) {
-                    displayResults(data);
+                    rawData = data; // Store raw data
+                    displayResults(applyRules(data)); // Apply user rules
                 } else {
                     showError(data.error || 'Error processing file');
                 }
@@ -352,6 +598,7 @@
                     <div class="transaction-category">${transaction.category.replace(/_/g, ' ')}</div>
                     <div class="${amountClass}">$${transaction.amount.toFixed(2)}</div>
                 `;
+                div.addEventListener('click', () => showModal(transaction, type));
                 container.appendChild(div);
             });
         }
