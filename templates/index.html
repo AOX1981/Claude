@@ -666,8 +666,12 @@
             }
         });
 
-        // Load rules on page load
-        displayRules();
+        // Load rules on page load (safely)
+        try {
+            displayRules();
+        } catch (e) {
+            console.log('Rules display failed', e);
+        }
 
         // ==================== END LEARNING FEATURE ====================
 
@@ -722,16 +726,6 @@
 
             const formData = new FormData();
             formData.append('file', selectedFile);
-
-            // Include user rules (safely)
-            try {
-                const rules = loadRules();
-                if (rules && rules.length > 0) {
-                    formData.append('user_rules', JSON.stringify(rules));
-                }
-            } catch (e) {
-                console.log('No rules loaded', e);
-            }
 
             loading.style.display = 'block';
             analyzeBtn.disabled = true;
